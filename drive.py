@@ -1,7 +1,8 @@
 import argparse
 import base64
 import json
-
+import math
+import cv2
 import numpy as np
 import socketio
 import eventlet
@@ -11,7 +12,6 @@ from PIL import Image
 from PIL import ImageOps
 from flask import Flask, render_template
 from io import BytesIO
-
 from keras.models import model_from_json
 from keras.preprocessing.image import ImageDataGenerator, array_to_img, img_to_array
 
@@ -20,6 +20,14 @@ sio = socketio.Server()
 app = Flask(__name__)
 model = None
 prev_image_array = None
+
+def resize_image(image):
+    shape = image.shape
+    image = image[math.floor(shape[0]/4):shape[0]-13, 0:shape[1]]
+    ratio = 100.0 / shape[1]
+    dim = (100, int(shape[0] * ratio))
+    resized_image = cv2.resize(image, dim, interpolation = cv2.INTER_AREA)
+    return resized_image
 
 @sio.on('telemetry')
 def telemetry(sid, data):
@@ -32,7 +40,8 @@ def telemetry(sid, data):
     # The current image from the center camera of the car
     imgString = data["image"]
     image = Image.open(BytesIO(base64.b64decode(imgString)))
-    image_array = np.asarray(image)
+    image_pre = np.asarray(image)
+    image_array = resize_image(image_pre)
     transformed_image_array = image_array[None, :, :, :]
     # This model currently assumes that the features of the model are just the images. Feel free to change this.
     steering_angle = float(model.predict(transformed_image_array, batch_size=1))
