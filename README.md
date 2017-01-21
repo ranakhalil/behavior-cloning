@@ -14,8 +14,7 @@ the tip top of the car doesn't appear anymore
 
 Here is the initial comma.ai model which I used:
 
-,,,,
-
+````
 model = Sequential()
 model.add(Lambda(lambda x: x/127.5 - 1., input_shape=img_shape, output_shape=img_shape))
 model.add(Convolution2D(16, 8, 8, subsample=(4, 4), border_mode="same"))
@@ -32,15 +31,13 @@ model.add(ELU())
 model.add(Dense(1))
 model.compile(optimizer="adam", loss="mse")
 model.fit(X_train, y_train, batch_size=100, nb_epoch=100,validation_data=(X_val, y_val), shuffle=True)
-
-,,,,
+````
 
 You can see the model from comma ai has three Convolutional layers and uses ELU activation functions.
 
 The NVIDIA model on the other hand:
 
-,,,,
-
+````
 model = Sequential()
 model.add(Lambda(lambda x: x/127.5 - 1., input_shape=img_shape))
 model.add(Convolution2D(3, 1, 1, border_mode='same', name='color_conv'))
@@ -78,8 +75,7 @@ model.add(Activation('relu'))
 model.add(Dense(1))
 model.compile(optimizer="adam", loss="mse")
 model.fit(X_train, y_train, batch_size=100, nb_epoch=50,validation_data=(X_val, y_val), shuffle=True)
-
-,,,,
+````
 
 The NVIDIA model on the other hand has six convulotionl layers, and uses relu activation functions.
 
