@@ -61,18 +61,23 @@ model.add(Convolution2D(3, 1, 1, border_mode='same', name='color_conv'))
 
 model.add(Convolution2D(24, 5, 5, subsample=(2, 2), border_mode="valid"))
 model.add(Activation('relu'))
+model.add(Dropout(0.2))
 
 model.add(Convolution2D(36, 5, 5, subsample=(2, 2), border_mode="valid"))
 model.add(Activation('relu'))
+model.add(Dropout(0.2))
 
 model.add(Convolution2D(48, 3, 3, subsample=(1, 1), border_mode="valid"))
 model.add(Activation('relu'))
+model.add(Dropout(0.2))
 
 model.add(Convolution2D(64, 3, 3, subsample=(1, 1), border_mode="valid"))
 model.add(Activation('relu'))
+model.add(Dropout(0.2))
 
 model.add(Convolution2D(64, 3, 3, subsample=(1, 1), border_mode="valid"))
 model.add(Activation('relu'))
+model.add(Dropout(0.2))
 
 model.add(Flatten())
 model.add(Dense(1164))
