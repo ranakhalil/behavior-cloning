@@ -9,19 +9,23 @@ import math
 import csv
 import cv2
 import os.path
+import sklearn
 from sklearn.model_selection import train_test_split
+from sklearn.utils import shuffle
 from keras.models import Sequential
 from keras.layers import Dense, Activation, Convolution2D, Flatten, Lambda, Dropout, Lambda, ELU, PReLU, Cropping2D
 from keras.preprocessing.image import img_to_array
 from keras.optimizers import Adam
+from keras.callbacks import ModelCheckpoint
 
-# def resize_image(image):
-#     shape = image.shape
-#     image = image[math.floor(shape[0]/4):shape[0]-13, 0:shape[1]]
-#     ratio = 100.0 / shape[1]
-#     dim = (100, int(shape[0] * ratio))
-#     resized_image = cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
-#     return img_to_array(resized_image)
+
+def resize_image(image):
+    shape = image.shape
+    image = image[math.floor(shape[0]/4):shape[0]-13, 0:shape[1]]
+    ratio = 100.0 / shape[1]
+    dim = (100, int(shape[0] * ratio))
+    resized_image = cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
+    return img_to_array(resized_image)
 
 def load_images(driving_data, core_path='./data/'):
     resized_images = []
@@ -39,6 +43,7 @@ def load_images(driving_data, core_path='./data/'):
         for image in np.array([cimage, limage, rimage]):
             image_copy = np.copy(image)
             image_copy = cv2.cvtColor(image_copy, cv2.COLOR_BGR2RGB)
+            image_copy = resize_image(image_copy)
             resized_images.append(image_copy)
         float_angle = float(steering_angle)
         steerings.append(float_angle)
@@ -46,22 +51,7 @@ def load_images(driving_data, core_path='./data/'):
         steerings.append(float_angle - correction)
     return resized_images, steerings
 
-# Load the data
-data = {}
-columns = ['center', 'left', 'right', 'steering', 'throttle', 'brake', 'speed']
-file_path = './data/driving_log.csv'
-driving_data = pd.read_csv(file_path, names=columns)[1:]
-
-images, steering_angles = load_images(driving_data)
-X_train = np.array(images)
-y_train = np.array(steering_angles)
-
-# X_train, X_val, y_train, y_val = train_test_split(images, steering_angles,  test_size=0.2, random_state=1)
-
-print('Loaded Images!!')
-
-def generateImages(x, y):
-    # Flipping images
+def flip_values(x, y):
     augmented_images = []
     augmented_steering_angles = []
     for image, steering_angle in zip(x, y):
@@ -71,53 +61,91 @@ def generateImages(x, y):
         flipped_streering_angle = float(steering_angle) * -1.0
         augmented_images.append(flipped_image)
         augmented_steering_angles.append(flipped_streering_angle)
-    yield augmented_images, augmented_steering_angles
+    return augmented_images, augmented_steering_angles
 
+
+def generator(images, steering_angles, batch_size=32):
+    num_samples = len(images)
+    while 1:  # Loop forever so the generator never terminates
+        for offset in range(0, num_samples, batch_size):
+            batch_images = images[offset:offset + batch_size]
+            batch_steering_angles = steering_angles[offset:offset + batch_size]
+            # trim image to only see section with road
+            x = np.array(batch_images)
+            y = np.array(batch_steering_angles)
+            yield shuffle(x, y, random_state=0)
+
+
+# Load the data
+data = {}
+columns = ['center', 'left', 'right', 'steering', 'throttle', 'brake', 'speed']
+file_path = './data/driving_log.csv'
+driving_data = pd.read_csv(file_path, names=columns)[1:]
+
+images, steering_angles = load_images(driving_data)
+final_images, final_steering_angles = flip_values(images, steering_angles)
+
+X_train, X_val, y_train, y_val = train_test_split(final_images, final_steering_angles,  test_size=0.2, random_state=1)
+
+
+train_generator = generator(X_train, y_train, batch_size=32)
+validation_generator = generator(X_val, y_val, batch_size=32)
+
+print('Loaded Images!!')
 
 # model
-img_shape = (160, 320, 3)
+img_shape = X_train[0].shape
 print('Image Shape : ', img_shape)
 
 model = Sequential()
 model.add(Lambda(lambda x: x/255.0 - 0.5, input_shape=img_shape))
-model.add(Cropping2D(cropping=((70, 25), (0, 0))))
+# model.add(Cropping2D(cropping=((70, 25), (0, 0)), dim_ordering='default'))
 model.add(Convolution2D(3, 1, 1, border_mode='same', name='color_conv'))
 
 model.add(Convolution2D(24, 5, 5, subsample=(2, 2), border_mode="valid"))
-model.add(Activation('relu'))
+model.add(ELU())
 
 model.add(Convolution2D(36, 5, 5, subsample=(2, 2), border_mode="valid"))
-model.add(Activation('relu'))
+model.add(ELU())
 
 model.add(Convolution2D(48, 3, 3, subsample=(1, 1), border_mode="valid"))
-model.add(Activation('relu'))
+model.add(ELU())
 
 model.add(Convolution2D(64, 3, 3, subsample=(1, 1), border_mode="valid"))
-model.add(Activation('relu'))
+model.add(ELU())
 
 model.add(Convolution2D(64, 3, 3, subsample=(1, 1), border_mode="valid"))
-model.add(Activation('relu'))
+model.add(ELU())
 
 model.add(Flatten())
 model.add(Dense(1164))
 model.add(Dropout(0.2))
-model.add(Activation('relu'))
+model.add(ELU())
 
 model.add(Dense(100))
-model.add(Activation('relu'))
+model.add(Dropout(0.2))
+model.add(ELU())
 
 model.add(Dense(50))
-model.add(Activation('relu'))
+model.add(Dropout(0.2))
+model.add(ELU())
 
 model.add(Dense(10))
-model.add(Activation('relu'))
+model.add(Dropout(0.2))
+model.add(ELU())
 
-model.add(Activation('relu'))
-
+model.add(ELU())
 model.add(Dense(1))
+
+model.summary()
 model.compile(optimizer="adam", loss="mse")
-#model.fit_generator(generateImages(X_train, y_train), samples_per_epoch=1000, nb_epoch=50, validation_data=generateImages(X_val, y_val))
-model.fit(X_train, y_train, batch_size=100, nb_epoch=50,validation_split=0.2, shuffle=True)
+
+# checkpoint
+checkpoint = ModelCheckpoint("model-{epoch:02d}.h5", monitor='loss', verbose=1, save_best_only=False, mode='max')
+
+# fit the model
+model.fit_generator(train_generator, samples_per_epoch=len(X_train), nb_epoch=15 , validation_data=validation_generator, nb_val_samples=len(X_val), callbacks=[checkpoint])
+
 # save model
 print('Saving Model Weights!!')
 model.save_weights('model.h5')
