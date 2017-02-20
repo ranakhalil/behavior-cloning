@@ -17,7 +17,7 @@ from keras.layers import Dense, Activation, Convolution2D, Flatten, Lambda, Drop
 from keras.preprocessing.image import img_to_array
 from keras.optimizers import Adam
 from keras.callbacks import ModelCheckpoint
-
+from keras.layers.normalization import BatchNormalization
 
 def resize_image(image):
     shape = image.shape
@@ -29,7 +29,7 @@ def resize_image(image):
 
 def load_images(driving_data, core_path='./data/'):
     resized_images = []
-    correction = 0.2
+    correction = 0.05
     steerings = []
     for left_image, center_image, right_image, steering_angle in zip(driving_data['left'], driving_data['center'], driving_data['right'], driving_data['steering']):
         lname = core_path + left_image
@@ -88,63 +88,40 @@ final_images, final_steering_angles = flip_values(images, steering_angles)
 X_train, X_val, y_train, y_val = train_test_split(final_images, final_steering_angles,  test_size=0.2, random_state=1)
 
 
-train_generator = generator(X_train, y_train, batch_size=32)
-validation_generator = generator(X_val, y_val, batch_size=32)
+train_generator = generator(X_train, y_train, batch_size=64)
+validation_generator = generator(X_val, y_val, batch_size=64)
 
 print('Loaded Images!!')
 
 # model
 img_shape = X_train[0].shape
+
 print('Image Shape : ', img_shape)
 
 model = Sequential()
-model.add(Lambda(lambda x: x/255.0 - 0.5, input_shape=img_shape))
-# model.add(Cropping2D(cropping=((70, 25), (0, 0)), dim_ordering='default'))
-model.add(Convolution2D(3, 1, 1, border_mode='same', name='color_conv'))
-
-model.add(Convolution2D(24, 5, 5, subsample=(2, 2), border_mode="valid"))
-model.add(ELU())
-
-model.add(Convolution2D(36, 5, 5, subsample=(2, 2), border_mode="valid"))
-model.add(ELU())
-
-model.add(Convolution2D(48, 3, 3, subsample=(1, 1), border_mode="valid"))
-model.add(ELU())
-
-model.add(Convolution2D(64, 3, 3, subsample=(1, 1), border_mode="valid"))
-model.add(ELU())
-
-model.add(Convolution2D(64, 3, 3, subsample=(1, 1), border_mode="valid"))
-model.add(ELU())
-
+model.add(BatchNormalization(epsilon=0.001,mode=2, axis=1,input_shape=img_shape))
+model.add(Convolution2D(24,5,5,border_mode='valid', activation='relu', subsample=(2,2)))
+model.add(Convolution2D(36,5,5,border_mode='valid', activation='relu', subsample=(2,2)))
+model.add(Convolution2D(48,5,5,border_mode='valid', activation='relu', subsample=(2,2)))
+model.add(Convolution2D(64,3,3,border_mode='valid', activation='relu', subsample=(1,1)))
+model.add(Convolution2D(64,1,7,border_mode='valid', activation='relu', subsample=(1,1)))
 model.add(Flatten())
-model.add(Dense(1164))
+model.add(Dense(1164, activation='relu'))
 model.add(Dropout(0.2))
-model.add(ELU())
-
-model.add(Dense(100))
-model.add(Dropout(0.2))
-model.add(ELU())
-
-model.add(Dense(50))
-model.add(Dropout(0.2))
-model.add(ELU())
-
-model.add(Dense(10))
-model.add(Dropout(0.2))
-model.add(ELU())
-
-model.add(ELU())
-model.add(Dense(1))
+model.add(Dense(100, activation='relu'))
+model.add(Dense(50, activation='relu'))
+model.add(Dense(10, activation='relu'))
+model.add(Dense(1, activation='tanh'))
+adam = Adam(lr=0.0001)
+model.compile(loss='mse', optimizer=adam, metrics=['mse', 'accuracy'])
 
 model.summary()
-model.compile(optimizer="adam", loss="mse")
 
 # checkpoint
 checkpoint = ModelCheckpoint("model-{epoch:02d}.h5", monitor='loss', verbose=1, save_best_only=False, mode='max')
 
 # fit the model
-model.fit_generator(train_generator, samples_per_epoch=len(X_train), nb_epoch=15 , validation_data=validation_generator, nb_val_samples=len(X_val), callbacks=[checkpoint])
+model.fit_generator(train_generator, samples_per_epoch=len(X_train), nb_epoch=25, validation_data=validation_generator, nb_val_samples=len(X_val), callbacks=[checkpoint])
 
 # save model
 print('Saving Model Weights!!')
